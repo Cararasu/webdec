@@ -177,24 +177,26 @@ class BranchAstNode(AstNode):
 		self.cond = cond
 	def __repr__(self):
 		if self.cond:
-			return "break " + str(self.label) + " block(s)"
-		return "if(" + str(self.cond) + ") break " + str(self.label) + " block(s)"
+			return "branch " + str(self.label)
+		return "if(" + str(self.cond) + ") branch " + str(self.label)
 		
 		
 class BlockAstNode(AstNode):
-	def __init__(self, exprs, returns):
+	def __init__(self, exprs, returns, label):
 		self.exprs = exprs
 		self.returns = returns
+		self.label = label
 	def __repr__(self):
 		if len(self.returns) == 0:
 			return "block {" + '; '.join(map(str, self.exprs)) + "}"
 		return ", ".join(map(str, self.returns)) + " <- {" + '; '.join(map(str, self.exprs)) + "}"
 class IfElseAstNode(AstNode):
-	def __init__(self, cond, trueexprs, falseexprs, returns):
+	def __init__(self, cond, trueexprs, falseexprs, returns, label):
 		self.cond = cond
 		self.trueexprs = trueexprs
 		self.falseexprs = falseexprs
 		self.returns = returns
+		self.label = label
 	def __repr__(self):
 		string = ""
 		if len(self.returns) != 0:
@@ -206,9 +208,10 @@ class IfElseAstNode(AstNode):
 			string += str(self.falseexprs)
 		return string
 class LoopAstNode(AstNode):
-	def __init__(self, exprs, returns):
+	def __init__(self, exprs, returns, label):
 		self.exprs = exprs
 		self.returns = returns
+		self.label = label
 	def __repr__(self):
 		if len(self.returns) == 0:
 			return "loop {" + '; '.join(map(str, self.exprs)) + "}"
@@ -235,9 +238,9 @@ class DecompilationContext:
 		self.exprs = []
 		self.parentcontext = parentcontext
 		if parentcontext == None:
-			self.indent = 0
+			self.depth = 0
 		else:
-			self.indent = parentcontext.indent + 1
+			self.depth = parentcontext.depth + 1
 		self.variablecount = 0
 	def newVar(self):
 		if self.parentcontext == None:
@@ -305,7 +308,7 @@ class DecompilationContext:
 			blockreturns.append(VarAstNode(type, context = self))
 			self.push(blockreturns[-1])
 		
-		return IfElseAstNode(cond, truecontext.exprs, None if falsecontext == None else falsecontext.exprs, blockreturns)
+		return IfElseAstNode(cond, truecontext.exprs, None if falsecontext == None else falsecontext.exprs, blockreturns, "label_" + str(truecontext.depth))
 	def block(self, exprs, type):
 		context = DecompilationContext(self.module, self.func, self)
 		decompileExpr(context, exprs)
@@ -316,7 +319,7 @@ class DecompilationContext:
 			self.push(blockreturns[-1])
 			context.evict(BlockReturnAstNode([context.pop()]))
 			
-		return BlockAstNode(context.exprs, blockreturns)
+		return BlockAstNode(context.exprs, blockreturns, "label_" + str(context.depth))
 		
 	def loop(self, loopexpr, type):
 		context = DecompilationContext(self.module, self.func, self)
@@ -328,7 +331,7 @@ class DecompilationContext:
 			self.push(blockreturns[-1])
 			context.evict(BlockReturnAstNode([context.pop()]))
 			
-		return LoopAstNode(context.exprs, blockreturns)
+		return LoopAstNode(context.exprs, blockreturns, "label_" + str(context.depth))
 	def branch(self, label, condition):
 		return BranchBlockReturnAstNode()
 	def __repr__(self):
@@ -346,11 +349,11 @@ def returnsToString(returnvalues):
 def printExprs(exprs, indent = 0):
 	for expr in exprs:
 		if type(expr) == BlockAstNode:
-			print("    "*indent + returnsToString(expr.returns) + "{")
+			print("    "*indent + returnsToString(expr.returns) + expr.label + " {")
 			printExprs(expr.exprs, indent + 1)
 			print("    "*indent + "}")
 		elif type(expr) == IfElseAstNode:
-			print("    "*indent + returnsToString(expr.returns) + "if(" + str(expr.cond) + "){")
+			print("    "*indent + returnsToString(expr.returns) + expr.label + " if(" + str(expr.cond) + ") {")
 			printExprs(expr.trueexprs, indent + 1)
 			print("    "*indent + "}")
 			if expr.falseexprs != None:
@@ -358,14 +361,14 @@ def printExprs(exprs, indent = 0):
 				printExprs(expr.falseexprs, indent + 1)
 				print("    "*indent + "}")
 		elif type(expr) == LoopAstNode:
-			print("    "*indent + returnsToString(expr.returns) + "loop{")
+			print("    "*indent + returnsToString(expr.returns) + expr.label + " { //loop-head")
 			printExprs(expr.exprs, indent + 1)
 			print("    "*indent + "}")
 		else:
 			print("    "*indent + str(expr))
 
 def decompileWasmFunction(module, function, file):
-	print("\n\n\n\n\n\n")
+	print("\n\n\n")
 	print("Decompiling function")
 	print(function)
 	print(function.expr)
@@ -375,7 +378,6 @@ def decompileWasmFunction(module, function, file):
 	print("------------------------")
 	print("Final Result:")
 	printExprs(context.exprs, 1)
-	#file.write(function.printExpr(module))
 
 def decompileWasmModule(module, file):
 	for glob in module.globals:

@@ -146,7 +146,10 @@ class BranchInstruction(Instruction):
 		self.label = label
 		self.condition = condition
 	def doDecomp(self, context):
-		context.evict(BranchAstNode(self.label, self.condition))
+		itcontext = context
+		for i in range(self.label):
+			itcontext = itcontext.parentcontext
+		context.evict(BranchAstNode("label_" + str(itcontext.depth), self.condition))
 	def __repr__(self):
 		return "Branch" + ("If" if self.condition else "")
 class BranchTableInstruction(Instruction):
