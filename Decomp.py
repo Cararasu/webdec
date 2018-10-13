@@ -133,7 +133,9 @@ class LoadAstNode(AstNode):
 			return "load_%d(%s + %d align %d)" % (self.length, str(self.base), self.offset, 2**self.align)
 		elif self.length == 64 and (self.valtype == ValType.I64 or self.valtype == ValType.F64):
 			return "load_%d(%s + %d align %d)" % (self.length, str(self.base), self.offset, 2**self.align)
-		return "(%s) load_%d(%s + %d align %d %s)" % (str(self.valtype), self.length, str(self.base), self.offset, 2**self.align, "as_signed " if self.s_ext else "")
+		elif self.s_ext:
+			return "signed_ext<%s>(load_%d(%s + %d align %d))" % (str(self.valtype), self.length, str(self.base), self.offset, 2**self.align)
+		return "(%s) load_%d(%s + %d align %d)" % (str(self.valtype), self.length, str(self.base), self.offset, 2**self.align)
 class StoreAstNode(AstNode):
 	def __init__(self, valtype, base, length, align, offset, value):
 		self.offset = offset
@@ -368,16 +370,17 @@ def printExprs(exprs, indent = 0):
 			print("    "*indent + str(expr))
 
 def decompileWasmFunction(module, function, file):
-	print("\n\n\n")
+	print("")
+	print("")
 	print("Decompiling function")
 	print(function)
-	print(function.expr)
 	context = DecompilationContext(module, function)
 	decompileExpr(context, function.expr)
 	context.ret()
 	print("------------------------")
-	print("Final Result:")
+	print("Final Result: {")
 	printExprs(context.exprs, 1)
+	print("}")
 
 def decompileWasmModule(module, file):
 	for glob in module.globals:
